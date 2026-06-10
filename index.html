@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FFB-Capture — Working Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green-900:#10241a;--green-700:#1c4533;--green-600:#226347;--green-500:#2e8b5e;--green-100:#dcefe3;
+    --amber:#e8821e;--amber-soft:#fbe9d4;--fruit:#c83c1e;--cream:#f5f1e8;--paper:#fbf9f3;--ink:#1a201c;
+    --muted:#6b7d72;--line:#e3ddcd;--shadow:0 1px 2px rgba(16,36,26,.06),0 8px 24px rgba(16,36,26,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'IBM Plex Sans',sans-serif;background:var(--cream);color:var(--ink);line-height:1.45;
+    background-image:radial-gradient(circle at 1px 1px,rgba(28,69,51,.05) 1px,transparent 0);background-size:22px 22px;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+  .disp{font-family:'Archivo',sans-serif}
+  button{font-family:inherit}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 20px;background:var(--green-900);color:#fff;position:sticky;top:0;z-index:30;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:11px;font-family:'Archivo';font-weight:800;letter-spacing:-.02em;font-size:18px}
+  .logo{width:30px;height:30px;border-radius:8px;background:radial-gradient(circle at 30% 30%,var(--amber),var(--fruit));box-shadow:inset 0 0 0 2px rgba(255,255,255,.25);position:relative;flex:none}
+  .logo::after{content:"";position:absolute;inset:6px 6px auto auto;width:7px;height:7px;border-radius:50%;background:#fff;opacity:.85}
+  .who{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .who label{font-size:11px;color:#9fc0ac;text-transform:uppercase;letter-spacing:.05em}
+  .who select{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:7px 10px;font-family:inherit;font-size:13px;cursor:pointer;outline:none}
+  .who select option{color:#111}
+  .mini{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:7px 11px;font-size:12px;cursor:pointer}
+  .mini:hover{background:rgba(255,255,255,.18)}
+  .nav{display:flex;gap:4px;background:var(--green-700);padding:0 20px;flex-wrap:wrap;position:sticky;top:54px;z-index:25}
+  .nav button{background:none;border:none;color:#bfe0cd;font-family:'Archivo';font-weight:600;font-size:13.5px;padding:13px 16px;cursor:pointer;border-bottom:3px solid transparent}
+  .nav button.on{color:#fff;border-bottom-color:var(--amber)}
+  .nav .badge{display:inline-block;background:var(--amber);color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:1px 7px;margin-left:6px;vertical-align:middle}
+  .stage{max-width:1180px;margin:24px auto;padding:0 20px 70px}
+  h1.page{font-family:'Archivo';font-weight:800;font-size:25px;letter-spacing:-.025em;color:var(--green-900)}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 18px}
+  .rowb{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+  .btn{font-family:'Archivo';font-weight:600;font-size:13px;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px}
+  .btn.primary{background:var(--green-600);color:#fff;box-shadow:0 6px 16px rgba(34,99,71,.25)}
+  .btn.primary:hover{transform:translateY(-1px)}
+  .btn.ghost{background:var(--paper);color:var(--green-700);border:1px solid var(--line)}
+  .btn.warn{background:var(--fruit);color:#fff}
+  .btn.sm{padding:7px 12px;font-size:12px}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+  .filt{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:7px 12px;font-size:13px;display:flex;align-items:center;gap:7px;box-shadow:var(--shadow)}
+  .filt b{font-family:'Archivo';font-weight:600;color:var(--green-700);font-size:12px}
+  .filt select,.filt input{border:none;background:none;font-family:inherit;font-size:13px;color:var(--ink);outline:none}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:13px;margin-bottom:24px}
+  .kpi{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:15px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green-500)}
+  .kpi.amber::before{background:var(--amber)}.kpi.red::before{background:var(--fruit)}
+  .kpi .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-bottom:7px}
+  .kpi .num{font-family:'Archivo';font-weight:800;font-size:24px;letter-spacing:-.03em;color:var(--green-900);line-height:1}
+  .kpi .unit{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);overflow:hidden}
+  .phead{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .phead h2{font-family:'Archivo';font-weight:700;font-size:14.5px;color:var(--green-900)}
+  .tablewrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+  th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:10px 13px;border-bottom:1px solid var(--line);background:#f3efe4;white-space:nowrap}
+  td{padding:11px 13px;border-bottom:1px solid #efe9da;white-space:nowrap}
+  tr.clk{cursor:pointer}tr.clk:hover td{background:#f6f3ea}
+  .tnum{font-family:'IBM Plex Mono';font-weight:600;color:var(--green-700)}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .pill.pending{background:var(--amber-soft);color:#a85a12}
+  .pill.completed{background:var(--green-100);color:var(--green-700)}
+  .pill.approved{background:#d7e9ff;color:#1b5aa8}
+  .pill.rejected{background:#fadbd5;color:#a4291a}
+  .pill.returned{background:#fde3d3;color:#a4470f}
+  .pill.teller{background:var(--green-100);color:var(--green-700)}
+  .pill.supervisor{background:var(--amber-soft);color:#a85a12}
+  .pill.admin{background:#d7e9ff;color:#1b5aa8}
+  .phs{display:inline-flex;gap:3px;vertical-align:middle}
+  .phdot{width:9px;height:9px;border-radius:2px;background:#d8d0bd}
+  .phdot.f{background:var(--green-500)}
+  .pcount{font-family:'IBM Plex Mono';font-size:11px;color:var(--muted);margin-left:6px}
+  .empty{text-align:center;padding:46px 20px;color:var(--muted)}
+  .empty .eic{font-size:32px;opacity:.4;margin-bottom:10px}
+  .empty .et{font-family:'Archivo';font-weight:700;color:var(--green-900);font-size:15px;margin-bottom:4px}
+  .empty .es{font-size:13px;max-width:430px;margin:0 auto}
+  /* forms */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .field{margin-bottom:0}
+  label.fl{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;margin:0 0 5px}
+  .in{width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;font-family:'IBM Plex Sans';font-size:14px;color:var(--ink);outline:none;transition:.15s}
+  .in:focus{border-color:var(--green-500);box-shadow:0 0 0 3px rgba(46,139,94,.12)}
+  .req{color:var(--fruit)}
+  /* layout cards */
+  .layout2{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);padding:18px}
+  .card h2{font-family:'Archivo';font-weight:700;font-size:14.5px;color:var(--green-900);margin-bottom:3px}
+  .card .hint{font-size:12px;color:var(--muted);margin-bottom:16px}
+  .toggle{display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;margin:2px 0 16px}
+  .sw{width:42px;height:24px;border-radius:20px;background:#cfc7b3;position:relative;transition:.2s;flex:none}
+  .sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
+  .toggle.on .sw{background:var(--green-500)}.toggle.on .sw::after{left:21px}
+  /* modal */
+  .backdrop{position:fixed;inset:0;background:rgba(16,36,26,.5);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:24px;overflow-y:auto}
+  .backdrop.show{display:flex}
+  .modal{background:var(--paper);border-radius:18px;box-shadow:0 30px 80px rgba(16,36,26,.4);width:100%;max-width:760px;margin:auto}
+  .mhead2{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
+  .mhead2 h2{font-family:'Archivo';font-weight:800;font-size:18px;color:var(--green-900)}
+  .x{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
+  .mbody2{padding:20px}
+  .opisbox{background:var(--green-900);color:#fff;border-radius:13px;padding:15px;margin-bottom:18px}
+  .opisbox .src{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--amber);font-weight:600;margin-bottom:10px}
+  .ogrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px 16px}
+  .ofld .k{font-size:10px;color:#8fb39d;text-transform:uppercase;letter-spacing:.03em}
+  .ofld .v{font-family:'IBM Plex Mono';font-weight:600;font-size:13.5px;margin-top:1px}
+  .seclbl{font-family:'Archivo';font-weight:700;font-size:13px;color:var(--green-900);margin:6px 2px 11px;display:flex;justify-content:space-between;align-items:center}
+  .prog{font-family:'IBM Plex Mono';font-size:12px;color:var(--amber);font-weight:600}.prog.done{color:var(--green-600)}
+  .slots{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .slot{border:2px dashed #cdc4af;border-radius:13px;min-height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#fbf9f3;text-align:center;padding:8px;overflow:hidden;position:relative;transition:.15s}
+  .slot:hover{border-color:var(--green-500)}
+  .slot .ic{font-size:24px;opacity:.5}
+  .slot .nm{font-size:12px;font-weight:600;color:var(--muted)}
+  .slot .cap{font-size:10px;color:#a99}
+  .slot.span2{grid-column:1/-1}
+  .slot.filled{border:2px solid var(--green-500);padding:0;background:#000}
+  .slot.filled img{width:100%;height:100%;min-height:140px;object-fit:cover;display:block}
+  .slot .ck{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:var(--green-500);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+  .slot .retag{position:absolute;bottom:8px;left:8px;background:rgba(16,36,26,.7);color:#fff;font-size:10px;padding:3px 8px;border-radius:6px}
+  .slot.filled .nmover{position:absolute;top:8px;left:8px;background:rgba(16,36,26,.7);color:#fff;font-size:10px;padding:3px 8px;border-radius:6px}
+  .helper{font-size:12px;color:var(--amber);text-align:center;margin:14px 0 12px;min-height:15px}
+  .helper.ok{color:var(--green-600)}
+  .acts{display:flex;gap:10px;flex-wrap:wrap}
+  .submit{flex:1;border:none;border-radius:12px;padding:14px;font-family:'Archivo';font-weight:700;font-size:15px;color:#fff;background:#c7c0ad;cursor:not-allowed;transition:.2s}
+  .submit.ready{background:var(--green-600);cursor:pointer;box-shadow:0 8px 22px rgba(34,99,71,.3)}
+  .banner{background:#fff6e8;border:1px solid #f1d9b4;color:#925a14;border-radius:12px;padding:12px 15px;font-size:12.5px;margin-bottom:18px;display:flex;gap:10px;align-items:flex-start}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green-900);color:#fff;padding:12px 20px;border-radius:11px;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.3);z-index:80;opacity:0;transition:.25s;pointer-events:none}
+  .toast.show{opacity:1;bottom:34px}
+  .remarks{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font-family:inherit;font-size:13px;resize:vertical;min-height:60px;outline:none}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}.layout2{grid-template-columns:1fr}.ogrid{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.stage{padding:0 12px 50px}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="logo"></span> FFB&#8209;Capture</div>
+  <div class="who">
+    <label>Signed in as</label>
+    <select id="userSwitch" onchange="setUser(this.value)"></select>
+    <button class="mini" onclick="exportData()">⬇ Export</button>
+    <button class="mini" onclick="document.getElementById('importFile').click()">⬆ Import</button>
+    <input id="importFile" type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])">
+  </div>
+</div>
+<div class="nav" id="nav"></div>
+
+<div class="stage" id="app"></div>
+
+<!-- modal -->
+<div class="backdrop" id="backdrop"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- DATA ---------------- */
+const CENTRES = ["Bekenu Collection Centre","Beraya Collection Centre","Karabungan Collection Centre","Kejapil Collection Centre","Mill Collection Centre","Pelapi Collection Centre","Tegageng Collection Centre"];
+const TXN_TYPES = ["Credit","E-Bayaran","Cash"];
+const PHOTOS = [
+  {id:"vehicle_in",label:"Vehicle In",span:false},
+  {id:"vehicle_out",label:"Vehicle Out",span:false},
+  {id:"weighbridge_cash",label:"Weighbridge Ticket + Cash Payout",span:true}
+];
+const uid = () => Math.random().toString(36).slice(2,9);
+
+let state = {
+  users: [
+    {id:"u_admin", fullName:"Admin (HQ)", username:"admin", role:"admin", centre:"", active:true},
+    {id:"u_sup",   fullName:"Supervisor (HQ)", username:"supervisor", role:"supervisor", centre:"", active:true},
+    {id:"u_tel",   fullName:"Teller (Bekenu)", username:"teller.bekenu", role:"teller", centre:"Bekenu Collection Centre", active:true}
+  ],
+  txns: [],
+  currentUserId: "u_admin",
+  tab: "dashboard",
+  filters: {date:"", centre:"", teller:"", q:""}
+};
+
+const me = () => state.users.find(u=>u.id===state.currentUserId) || state.users[0];
+function scopedTxns(){
+  const u = me();
+  let list = state.txns.slice().sort((a,b)=> (b.dateTime||"").localeCompare(a.dateTime||""));
+  if(u.role==="teller" && u.centre) list = list.filter(t=>t.centre===u.centre);
+  return list;
+}
+
+/* ---------------- HELPERS ---------------- */
+function money(n){ if(n===""||n==null||isNaN(n)) return "—"; return "RM "+Number(n).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function kg(n){ if(n===""||n==null||isNaN(n)) return "—"; return Number(n).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+" kg"; }
+function fmtDT(iso){ if(!iso) return "—"; const d=new Date(iso); if(isNaN(d)) return iso; const p=x=>String(x).padStart(2,'0'); return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+function photoCount(t){ return PHOTOS.filter(p=>t.photos && t.photos[p.id]).length; }
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ---------------- NAV ---------------- */
+function renderNav(){
+  const u=me(); const tabs=[];
+  tabs.push(['dashboard','Dashboard']);
+  tabs.push(['transactions','Transactions']);
+  if(u.role==='admin') tabs.push(['users','User Management']);
+  document.getElementById('nav').innerHTML = tabs.map(([k,l])=>
+    `<button class="${state.tab===k?'on':''}" onclick="go('${k}')">${l}</button>`).join('');
+  // user switcher
+  document.getElementById('userSwitch').innerHTML = state.users.map(x=>
+    `<option value="${x.id}" ${x.id===state.currentUserId?'selected':''}>${esc(x.fullName)} · ${x.role}</option>`).join('');
+}
+function go(tab){ state.tab=tab; render(); }
+function setUser(id){ state.currentUserId=id; if(state.tab==='users' && me().role!=='admin') state.tab='dashboard'; render(); }
+
+/* ---------------- RENDER ---------------- */
+function render(){
+  renderNav();
+  const app=document.getElementById('app');
+  if(state.tab==='dashboard') app.innerHTML=viewDashboard();
+  else if(state.tab==='transactions') app.innerHTML=viewTransactions();
+  else if(state.tab==='users') app.innerHTML=viewUsers();
+}
+
+function filterBar(){
+  const f=state.filters; const u=me();
+  const centreOpts = u.role!=='teller'
+    ? `<option value="">All centres</option>`+CENTRES.map(c=>`<option ${f.centre===c?'selected':''}>${c}</option>`).join('')
+    : `<option value="${u.centre}">${u.centre}</option>`;
+  const tellers=[...new Set(state.users.filter(x=>x.role==='teller').map(x=>x.fullName))];
+  return `<div class="filters">
+    <div class="filt"><b>Date</b><input type="date" value="${f.date}" onchange="setFilter('date',this.value)"></div>
+    <div class="filt"><b>Centre</b><select onchange="setFilter('centre',this.value)" ${u.role==='teller'?'disabled':''}>${centreOpts}</select></div>
+    <div class="filt"><b>Teller</b><select onchange="setFilter('teller',this.value)"><option value="">All</option>${tellers.map(t=>`<option ${f.teller===t?'selected':''}>${esc(t)}</option>`).join('')}</select></div>
+    <div class="filt"><b>Search</b><input type="text" placeholder="ticket / vehicle / supplier" value="${esc(f.q)}" oninput="setFilter('q',this.value)" style="min-width:180px"></div>
+    ${(f.date||f.centre||f.teller||f.q)?`<button class="btn ghost sm" onclick="clearFilters()">Clear</button>`:''}
+  </div>`;
+}
+function setFilter(k,v){ state.filters[k]=v; render(); }
+function clearFilters(){ state.filters={date:"",centre:"",teller:"",q:""}; render(); }
+
+function applyFilters(list){
+  const f=state.filters;
+  return list.filter(t=>{
+    if(f.centre && t.centre!==f.centre) return false;
+    if(f.teller && t.tellerName!==f.teller) return false;
+    if(f.date && (t.dateTime||"").slice(0,10)!==f.date) return false;
+    if(f.q){ const q=f.q.toLowerCase(); const hay=[t.ticketNo,t.vehicle,t.supplier,t.centre,t.txnType].join(" ").toLowerCase(); if(!hay.includes(q)) return false; }
+    return true;
+  });
+}
+
+/* ---------- DASHBOARD ---------- */
+function viewDashboard(){
+  const list = applyFilters(scopedTxns());
+  const tickets=list.length;
+  const payout=list.reduce((s,t)=>s+(+t.payout||0),0);
+  const weight=list.reduce((s,t)=>s+(+t.nettWeight||0),0);
+  const completed=list.filter(t=>t.status==='completed'||t.status==='approved').length;
+  const pending=list.filter(t=>t.status==='pending').length;
+  const missing=list.filter(t=>photoCount(t)<3).length;
+  const kpi=(l,n,u,cls='')=>`<div class="kpi ${cls}"><div class="lbl">${l}</div><div class="num">${n}</div><div class="unit">${u}</div></div>`;
+  return `
+  <div class="rowb"><div><h1 class="page">Daily Summary Dashboard</h1><div class="sub">Live overview · ${esc(me().role==='teller'?me().centre:'all centres')}</div></div>
+    <button class="btn primary" onclick="openAdd()">+ New Transaction</button></div>
+  ${filterBar()}
+  <div class="kpis">
+    ${kpi('Tickets',tickets,'in view')}
+    ${kpi('Cash Payout',money(payout).replace('RM ',''),'RM')}
+    ${kpi('Weight Collected',(weight/1000).toLocaleString('en-MY',{maximumFractionDigits:2}),'tonnes')}
+    ${kpi('Completed',completed,'records')}
+    ${kpi('Pending',pending,'awaiting photos','amber')}
+    ${kpi('Missing Photos',missing,'need attention','red')}
+  </div>
+  ${txnTable(list)}`;
+}
+
+/* ---------- TRANSACTIONS ---------- */
+function viewTransactions(){
+  const list=applyFilters(scopedTxns());
+  return `<div class="rowb"><div><h1 class="page">Transactions</h1><div class="sub">${list.length} record(s) in view</div></div>
+    <button class="btn primary" onclick="openAdd()">+ New Transaction</button></div>
+    ${filterBar()}${txnTable(list)}`;
+}
+function txnTable(list){
+  const rows = list.length ? list.map(t=>{
+    const n=photoCount(t);
+    const dots=PHOTOS.map((p,i)=>`<i class="phdot ${t.photos&&t.photos[p.id]?'f':''}"></i>`).join('');
+    return `<tr class="clk" onclick="openTxn('${t.id}')">
+      <td class="mono">${fmtDT(t.dateTime)}</td>
+      <td class="tnum">${esc(t.ticketNo)}</td>
+      <td class="mono">${esc(t.vehicle||'—')}</td>
+      <td>${esc(t.supplier||'—')}</td>
+      <td class="mono">${kg(t.nettWeight)}</td>
+      <td class="mono">${money(t.payout)}</td>
+      <td>${esc(t.txnType||'—')}</td>
+      <td>${esc(t.centre||'—')}</td>
+      <td><span class="phs">${dots}</span><span class="pcount">${n}/3</span></td>
+      <td><span class="pill ${t.status}">${labelStatus(t.status)}</span></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="10"><div class="empty"><div class="eic">🧾</div><div class="et">No transactions yet</div><div class="es">Click “+ New Transaction” to key in a ticket. (In production these sync automatically from Opis Pro.)</div></div></td></tr>`;
+  return `<div class="panel"><div class="phead"><h2>Records</h2><span class="sub" style="margin:0">Tap a row to open &amp; upload photos</span></div>
+    <div class="tablewrap"><table><thead><tr>
+      <th>Date &amp; Time</th><th>Ticket No.</th><th>Vehicle</th><th>Supplier</th><th>Nett Wt</th><th>Payout</th><th>Txn Type</th><th>Centre</th><th>Photos</th><th>Status</th>
+    </tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function labelStatus(s){ return {pending:'Pending',completed:'✓ Completed',approved:'Approved',rejected:'Rejected',returned:'↩ Returned'}[s]||s; }
+
+/* ---------- USERS ---------- */
+function viewUsers(){
+  const rows = state.users.map(u=>`<tr>
+    <td>${esc(u.fullName)}</td><td class="mono">${esc(u.username)}</td>
+    <td><span class="pill ${u.role}">${u.role}</span></td>
+    <td>${esc(u.centre||'— all centres —')}</td>
+    <td>${u.active?'<span class="pill completed">Active</span>':'<span class="pill rejected">Inactive</span>'}</td>
+    <td>${u.id===state.currentUserId?'<span class="sub" style="margin:0">current</span>':`<button class="btn ghost sm" onclick="deleteUser('${u.id}')">Remove</button>`}</td>
+  </tr>`).join('');
+  return `<h1 class="page">User Management</h1><div class="sub">Create accounts and assign roles &amp; collection centres</div>
+  <div class="layout2">
+    <div class="card">
+      <h2>Add New User</h2><div class="hint">Fill the form and click Create.</div>
+      <div class="field" style="margin-bottom:14px"><label class="fl">Full Name <span class="req">*</span></label><input class="in" id="nu_name" placeholder="e.g. Ahmad bin Ali"></div>
+      <div class="field" style="margin-bottom:14px"><label class="fl">Username <span class="req">*</span></label><input class="in" id="nu_user" placeholder="login username"></div>
+      <div class="field" style="margin-bottom:14px"><label class="fl">Role</label>
+        <select class="in" id="nu_role" onchange="document.getElementById('nu_centre').disabled=(this.value==='admin'||this.value==='supervisor')">
+          <option value="teller">Teller</option><option value="supervisor">Supervisor</option><option value="admin">HQ / Admin</option>
+        </select></div>
+      <div class="field" style="margin-bottom:14px"><label class="fl">Collection Centre <span class="sub" style="text-transform:none;letter-spacing:0">(tellers only)</span></label>
+        <select class="in" id="nu_centre"><option value="">All centres</option>${CENTRES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div class="toggle on" id="nu_active" onclick="this.classList.toggle('on')"><span class="sw"></span> Active account</div>
+      <button class="btn primary" style="width:100%;justify-content:center" onclick="addUser()">Create User</button>
+    </div>
+    <div class="panel"><div class="phead"><h2>All Users (${state.users.length})</h2></div>
+      <div class="tablewrap"><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Collection Centre</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>
+  </div>`;
+}
+function addUser(){
+  const name=val('nu_name').trim(), user=val('nu_user').trim(), role=val('nu_role');
+  let centre=val('nu_centre'); const active=document.getElementById('nu_active').classList.contains('on');
+  if(!name||!user){ toast('Name and username are required'); return; }
+  if(state.users.some(u=>u.username.toLowerCase()===user.toLowerCase())){ toast('Username already exists'); return; }
+  if(role==='admin'||role==='supervisor') centre="";
+  state.users.push({id:uid(),fullName:name,username:user,role,centre,active});
+  toast('User created'); render();
+}
+function deleteUser(id){ state.users=state.users.filter(u=>u.id!==id); render(); toast('User removed'); }
+function val(id){ const e=document.getElementById(id); return e?e.value:""; }
+
+/* ---------- ADD TRANSACTION MODAL ---------- */
+function openAdd(){
+  const u=me();
+  const now=new Date(); now.setMinutes(now.getMinutes()-now.getTimezoneOffset());
+  const nowLocal=now.toISOString().slice(0,16);
+  const centreField = u.role!=='teller'
+    ? `<select class="in" id="t_centre"><option value="">Select centre…</option>${CENTRES.map(c=>`<option>${c}</option>`).join('')}</select>`
+    : `<select class="in" id="t_centre"><option>${u.centre}</option></select>`;
+  document.getElementById('modal').innerHTML=`
+    <div class="mhead2"><h2>New Transaction</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mbody2">
+      <div class="banner">✏️ Key in the weighbridge ticket details below. In production these fields are filled automatically by the Opis Pro sync.</div>
+      <div class="grid2">
+        <div class="field"><label class="fl">Date &amp; Time</label><input class="in" type="datetime-local" id="t_dt" value="${nowLocal}"></div>
+        <div class="field"><label class="fl">Ticket No. <span class="req">*</span></label><input class="in" id="t_ticket" placeholder="e.g. 88921"></div>
+        <div class="field"><label class="fl">Supplier Name</label><input class="in" id="t_supplier" placeholder="supplier"></div>
+        <div class="field"><label class="fl">Vehicle No.</label><input class="in" id="t_vehicle" placeholder="e.g. QAB 1234"></div>
+        <div class="field"><label class="fl">FFB Price (RM)</label><input class="in" type="number" step="0.01" id="t_price" placeholder="0.00" oninput="autoPayout()"></div>
+        <div class="field"><label class="fl">Nett Weight (KG)</label><input class="in" type="number" step="0.01" id="t_weight" placeholder="0.00" oninput="autoPayout()"></div>
+        <div class="field"><label class="fl">Payout (RM)</label><input class="in" type="number" step="0.01" id="t_payout" placeholder="auto = price × weight"></div>
+        <div class="field"><label class="fl">Transaction Type</label><select class="in" id="t_type">${TXN_TYPES.map(x=>`<option>${x}</option>`).join('')}</select></div>
+        <div class="field"><label class="fl">Collection Centre</label>${centreField}</div>
+      </div>
+      <div class="acts" style="margin-top:20px">
+        <button class="btn ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn primary" style="flex:1;justify-content:center" onclick="saveTxn()">Create Transaction</button>
+      </div>
+    </div>`;
+  showModal();
+}
+function autoPayout(){
+  const p=parseFloat(val('t_price')), w=parseFloat(val('t_weight')); const out=document.getElementById('t_payout');
+  if(!out) return; if(!out.dataset.touched && !isNaN(p) && !isNaN(w)) out.value=(p*w).toFixed(2);
+}
+function saveTxn(){
+  const ticket=val('t_ticket').trim();
+  if(!ticket){ toast('Ticket No. is required'); return; }
+  if(state.txns.some(t=>t.ticketNo.toLowerCase()===ticket.toLowerCase())){ toast('That ticket number already exists'); return; }
+  const centre = val('t_centre') || me().centre;
+  const t={ id:uid(), dateTime:val('t_dt'), ticketNo:ticket, supplier:val('t_supplier').trim(),
+    vehicle:val('t_vehicle').trim(), ffbPrice:val('t_price'), nettWeight:val('t_weight'),
+    payout:val('t_payout'), txnType:val('t_type'), centre, status:'pending',
+    photos:{}, remarks:'', tellerName:me().role==='teller'?me().fullName:'', createdBy:me().fullName, createdAt:Date.now() };
+  state.txns.push(t); closeModal(); toast('Transaction created'); state.tab='transactions'; render();
+  openTxn(t.id);
+}
+
+/* ---------- TRANSACTION DETAIL MODAL ---------- */
+let activeTxn=null;
+function openTxn(id){
+  activeTxn=id; const t=state.txns.find(x=>x.id===id); if(!t) return;
+  const u=me();
+  const ofld=(k,v)=>`<div class="ofld"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  const canUpload = (u.role==='teller'||u.role==='admin') && (t.status==='pending'||t.status==='returned');
+  const slots=PHOTOS.map(p=>{
+    const ph=t.photos&&t.photos[p.id];
+    if(ph){ return `<div class="slot filled ${p.span?'span2':''}" ${canUpload?`onclick="pickPhoto('${p.id}')"`:''}>
+        <img src="${ph.dataUrl}" alt=""><div class="ck">✓</div><div class="nmover">${p.label}</div>${canUpload?'<div class="retag">tap to replace</div>':''}</div>`; }
+    return `<div class="slot ${p.span?'span2':''}" ${canUpload?`onclick="pickPhoto('${p.id}')"`:'style="cursor:default;opacity:.7"'}>
+        <div class="ic">📷</div><div class="nm">${p.label}</div>${canUpload?'<div class="cap">Take photo · Upload file</div>':'<div class="cap">—</div>'}</div>`;
+  }).join('');
+  const n=photoCount(t); const ready=n===3;
+  const isReturned = t.status==='returned';
+  const replacedSinceReturn = isReturned && PHOTOS.some(p=>t.photos[p.id] && t.photos[p.id].ts > (t.returnedAt||0));
+  const submittable = isReturned ? (ready && replacedSinceReturn) : ready;
+  const showSubmit = (u.role==='teller'||u.role==='admin') && (t.status==='pending'||t.status==='returned');
+  const submitLabel = isReturned ? 'Resubmit for Approval' : 'Complete Transaction';
+  const completeBtn = showSubmit ?
+    `<button class="submit ${submittable?'ready':''}" onclick="completeTxn('${t.id}')" ${submittable?'':'disabled'}>${submitLabel}</button>` : '';
+  const reviewBtns = (u.role==='supervisor'||u.role==='admin') && (t.status==='completed') ?
+    `<button class="btn warn" onclick="reviewTxn('${t.id}','returned')">Reject &amp; Return</button>
+     <button class="submit ready" onclick="reviewTxn('${t.id}','approved')">Approve</button>` : '';
+  const returnBanner = isReturned ?
+    `<div class="banner" style="background:#fdecea;border-color:#f3c0b8;color:#a4291a">↩️ <span><b>Returned for correction</b>${t.reviewedBy?` by ${esc(t.reviewedBy)}`:''}. Reason: ${esc(t.remarks||'(no reason given)')}<br>Replace the affected photo, then resubmit for approval.</span></div>` : '';
+  let helper='';
+  if(showSubmit){
+    if(isReturned){ helper = replacedSinceReturn
+        ? `<div class="helper ok">Photo updated — ready to resubmit ✓</div>`
+        : `<div class="helper">Replace the affected photo above, then resubmit.</div>`; }
+    else { helper = ready
+        ? `<div class="helper ok">All 3 photos added — ready to complete ✓</div>`
+        : `<div class="helper">Add ${3-n} more photo${3-n>1?'s':''} to complete this transaction.</div>`; }
+  }
+  document.getElementById('modal').innerHTML=`
+    <div class="mhead2"><h2>Ticket ${esc(t.ticketNo)} <span class="pill ${t.status}" style="vertical-align:middle">${labelStatus(t.status)}</span></h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mbody2">
+      ${returnBanner}
+      <div class="opisbox"><div class="src">◆ Synced from Opis Pro</div>
+        <div class="ogrid">
+          ${ofld('Date &amp; Time',fmtDT(t.dateTime))}${ofld('Ticket No.',esc(t.ticketNo))}${ofld('Supplier Name',esc(t.supplier||'—'))}
+          ${ofld('Vehicle No.',esc(t.vehicle||'—'))}${ofld('FFB Price (RM)',money(t.ffbPrice))}${ofld('Nett Weight (KG)',kg(t.nettWeight))}
+          ${ofld('Payout (RM)',money(t.payout))}${ofld('Transaction Type',esc(t.txnType||'—'))}${ofld('Collection Centre',esc(t.centre||'—'))}
+        </div></div>
+      <div class="seclbl">Required Photos <span class="prog ${ready?'done':''}">${n} of 3</span></div>
+      <div class="slots">${slots}</div>
+      ${helper}
+      <div class="field" style="margin:6px 0 14px"><label class="fl">Remarks</label>
+        <textarea class="remarks" id="t_remarks" ${(u.role==='supervisor'||u.role==='admin')?'':'readonly'} placeholder="Supervisor remarks…">${esc(t.remarks||'')}</textarea></div>
+      <div class="acts">
+        <button class="btn ghost" onclick="closeModal()">Close</button>
+        ${completeBtn}${reviewBtns}
+      </div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+    </div>`;
+  showModal();
+  const inp=document.getElementById('photoInput');
+  inp.onchange=()=>{ if(inp.files[0]) processPhoto(inp.files[0]); inp.value=''; };
+}
+let pendingType=null;
+function pickPhoto(type){ pendingType=type; document.getElementById('photoInput').click(); }
+function processPhoto(file){
+  const t=state.txns.find(x=>x.id===activeTxn); if(!t||!pendingType) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const maxW=1280; let w=img.width,h=img.height;
+      if(w>maxW){ h=Math.round(h*maxW/w); w=maxW; }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+      const lines=[fmtDT(t.dateTime), `TKT ${t.ticketNo} · ${t.centre||''}`, `Teller: ${me().fullName}`];
+      const fs=Math.max(13,Math.round(w*0.026)); const pad=Math.round(w*0.02); const lh=fs*1.35;
+      const boxH=lh*lines.length+pad;
+      ctx.fillStyle='rgba(16,36,26,.6)'; ctx.fillRect(0,h-boxH,w,boxH);
+      ctx.fillStyle='#fff'; ctx.font=`600 ${fs}px 'IBM Plex Mono',monospace`; ctx.textBaseline='top';
+      lines.forEach((ln,i)=>ctx.fillText(ln,pad,h-boxH+pad/2+i*lh));
+      const dataUrl=c.toDataURL('image/jpeg',0.72);
+      t.photos[pendingType]={dataUrl, ts:Date.now(), by:me().fullName};
+      pendingType=null; openTxn(t.id); toast('Photo added & watermarked');
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function completeTxn(id){
+  const t=state.txns.find(x=>x.id===id); if(!t) return;
+  if(photoCount(t)<3){ toast('All 3 photos are required'); return; } // enforced
+  const wasReturned = t.status==='returned';
+  if(wasReturned){
+    const replaced = PHOTOS.some(p=>t.photos[p.id] && t.photos[p.id].ts > (t.returnedAt||0));
+    if(!replaced){ toast('Replace the affected photo before resubmitting'); return; }
+    t.resubmittedAt=Date.now();
+  }
+  t.status='completed'; t.completedBy=me().fullName; t.completedAt=Date.now();
+  openTxn(id); toast(wasReturned?'Resubmitted for approval ✓':'Transaction completed ✓');
+}
+function reviewTxn(id,decision){
+  const t=state.txns.find(x=>x.id===id); if(!t) return;
+  const r=val('t_remarks');
+  if(decision==='returned' && !r.trim()){ toast('Add a remark so the teller knows what to fix'); return; }
+  t.remarks=r; t.reviewedBy=me().fullName; t.reviewedAt=Date.now();
+  if(decision==='returned'){ t.status='returned'; t.returnedAt=Date.now(); }
+  else { t.status='approved'; }
+  closeModal(); render(); toast(decision==='approved'?'Approved ✓':'Returned to teller for correction');
+}
+
+/* ---------- MODAL PLUMBING ---------- */
+function showModal(){ document.getElementById('backdrop').classList.add('show'); }
+function closeModal(){ document.getElementById('backdrop').classList.remove('show'); }
+document.getElementById('backdrop').addEventListener('click',e=>{ if(e.target.id==='backdrop') closeModal(); });
+
+/* ---------- EXPORT / IMPORT ---------- */
+function exportData(){
+  const blob=new Blob([JSON.stringify({users:state.users,txns:state.txns},null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='ffb-capture-data.json'; a.click(); URL.revokeObjectURL(a.href); toast('Data exported');
+}
+function importData(file){
+  if(!file) return; const r=new FileReader();
+  r.onload=e=>{ try{ const d=JSON.parse(e.target.result);
+      if(Array.isArray(d.users)) state.users=d.users;
+      if(Array.isArray(d.txns)) state.txns=d.txns;
+      if(!state.users.some(u=>u.id===state.currentUserId)) state.currentUserId=state.users[0]?.id;
+      render(); toast('Data imported'); }catch(err){ toast('Invalid file'); } };
+  r.readAsText(file);
+}
+
+render();
+</script>
+</body>
+</html>
