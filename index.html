@@ -144,8 +144,8 @@
   <div class="who">
     <label>Signed in as</label>
     <select id="userSwitch" onchange="setUser(this.value)"></select>
-    <button class="mini" onclick="exportData()">&#11015; Export</button>
-    <button class="mini" onclick="document.getElementById('importFile').click()">&#11014; Import</button>
+    <button class="mini" onclick="exportData()">⬇ Export</button>
+    <button class="mini" onclick="document.getElementById('importFile').click()">⬆ Import</button>
     <input id="importFile" type="file" accept="application/json" style="display:none" onchange="importData(this.files[0])">
   </div>
 </div>
@@ -296,7 +296,7 @@ function txnTable(list){
       <td><span class="phs">${dots}</span><span class="pcount">${n}/3</span></td>
       <td><span class="pill ${t.status}">${labelStatus(t.status)}</span></td>
     </tr>`;
-  }).join('') : `<tr><td colspan="10"><div class="empty"><div class="eic">🧾</div><div class="et">No transactions yet</div><div class="es">Click "+ New Transaction" to key in a ticket. (In production these sync automatically from Opis Pro.)</div></div></td></tr>`;
+  }).join('') : `<tr><td colspan="10"><div class="empty"><div class="eic">🧾</div><div class="et">No transactions yet</div><div class="es">Click “+ New Transaction” to key in a ticket. (In production these sync automatically from Opis Pro.)</div></div></td></tr>`;
   return `<div class="panel"><div class="phead"><h2>Records</h2><span class="sub" style="margin:0">Tap a row to open &amp; upload photos</span></div>
     <div class="tablewrap"><table><thead><tr>
       <th>Date &amp; Time</th><th>Ticket No.</th><th>Vehicle</th><th>Supplier</th><th>Nett Wt</th><th>Payout</th><th>Txn Type</th><th>Centre</th><th>Photos</th><th>Status</th>
@@ -362,7 +362,7 @@ function openAdd(){
         <div class="field"><label class="fl">Ticket No. <span class="req">*</span></label><input class="in" id="t_ticket" placeholder="e.g. 88921"></div>
         <div class="field"><label class="fl">Supplier Name</label><input class="in" id="t_supplier" placeholder="supplier"></div>
         <div class="field"><label class="fl">Vehicle No.</label><input class="in" id="t_vehicle" placeholder="e.g. QAB 1234"></div>
-        <div class="field"><label class="fl">FFB Price (RM/MT)</label><input class="in" type="number" step="0.01" id="t_price" placeholder="0.00" oninput="autoPayout()"></div>
+        <div class="field"><label class="fl">FFB Price (RM)</label><input class="in" type="number" step="0.01" id="t_price" placeholder="0.00" oninput="autoPayout()"></div>
         <div class="field"><label class="fl">Nett Weight (KG)</label><input class="in" type="number" step="0.01" id="t_weight" placeholder="0.00" oninput="autoPayout()"></div>
         <div class="field"><label class="fl">Payout (RM)</label><input class="in" type="number" step="0.01" id="t_payout" placeholder="auto = price × (weight/1000)"></div>
         <div class="field"><label class="fl">Transaction Type</label><select class="in" id="t_type">${TXN_TYPES.map(x=>`<option>${x}</option>`).join('')}</select></div>
@@ -401,9 +401,9 @@ function openTxn(id){
   const canUpload = (u.role==='teller'||u.role==='admin') && (t.status==='pending'||t.status==='returned');
   const slots=PHOTOS.map(p=>{
     const ph=t.photos&&t.photos[p.id];
-    if(ph){ return `<div class="slot filled ${p.span?'span2':''}" ${canUpload?`onclick="pickPhoto('${p.id}')"`:''})>
+    if(ph){ return `<div class="slot filled ${p.span?'span2':''}" ${canUpload?`onclick="pickPhoto('${p.id}')"`:''}>
         <img src="${ph.dataUrl}" alt=""><div class="ck">✓</div><div class="nmover">${p.label}</div>${canUpload?'<div class="retag">tap to replace</div>':''}</div>`; }
-    return `<div class="slot ${p.span?'span2':''}" ${canUpload?`onclick="pickPhoto('${p.id}')"`:''style="cursor:default;opacity:.7"'})>
+    return `<div class="slot ${p.span?'span2':''}" ${canUpload?`onclick="pickPhoto('${p.id}')"`:'style="cursor:default;opacity:.7"'}>
         <div class="ic">📷</div><div class="nm">${p.label}</div>${canUpload?'<div class="cap">Take photo · Upload file</div>':'<div class="cap">—</div>'}</div>`;
   }).join('');
   const n=photoCount(t); const ready=n===3;
@@ -418,7 +418,7 @@ function openTxn(id){
     `<button class="btn warn" onclick="reviewTxn('${t.id}','returned')">Reject &amp; Return</button>
      <button class="submit ready" onclick="reviewTxn('${t.id}','approved')">Approve</button>` : '';
   const returnBanner = isReturned ?
-    `<div class="banner" style="background:#fdecea;border-color:#f3c0b8;color:#a4291a">↩️ <span><b>Returned for correction</b>${t.reviewedBy?` by ${esc(t.reviewedBy)}`:''). Reason: ${esc(t.remarks||'(no reason given)')}<br>Replace the affected photo, then resubmit for approval.</span></div>` : '';
+    `<div class="banner" style="background:#fdecea;border-color:#f3c0b8;color:#a4291a">↩️ <span><b>Returned for correction</b>${t.reviewedBy?` by ${esc(t.reviewedBy)}`:''}. Reason: ${esc(t.remarks||'(no reason given)')}<br>Replace the affected photo, then resubmit for approval.</span></div>` : '';
   let helper='';
   if(showSubmit){
     if(isReturned){ helper = replacedSinceReturn
@@ -435,7 +435,7 @@ function openTxn(id){
       <div class="opisbox"><div class="src">◆ Synced from Opis Pro</div>
         <div class="ogrid">
           ${ofld('Date &amp; Time',fmtDT(t.dateTime))}${ofld('Ticket No.',esc(t.ticketNo))}${ofld('Supplier Name',esc(t.supplier||'—'))}
-          ${ofld('Vehicle No.',esc(t.vehicle||'—'))}${ofld('FFB Price (RM/MT)',money(t.ffbPrice))}${ofld('Nett Weight (KG)',kg(t.nettWeight))}
+          ${ofld('Vehicle No.',esc(t.vehicle||'—'))}${ofld('FFB Price (RM)',money(t.ffbPrice))}${ofld('Nett Weight (KG)',kg(t.nettWeight))}
           ${ofld('Payout (RM)',money(t.payout))}${ofld('Transaction Type',esc(t.txnType||'—'))}${ofld('Collection Centre',esc(t.centre||'—'))}
         </div></div>
       <div class="seclbl">Required Photos <span class="prog ${ready?'done':''}">${n} of 3</span></div>
