@@ -364,7 +364,7 @@ function openAdd(){
         <div class="field"><label class="fl">Vehicle No.</label><input class="in" id="t_vehicle" placeholder="e.g. QAB 1234"></div>
         <div class="field"><label class="fl">FFB Price (RM)</label><input class="in" type="number" step="0.01" id="t_price" placeholder="0.00" oninput="autoPayout()"></div>
         <div class="field"><label class="fl">Nett Weight (KG)</label><input class="in" type="number" step="0.01" id="t_weight" placeholder="0.00" oninput="autoPayout()"></div>
-        <div class="field"><label class="fl">Payout (RM)</label><input class="in" type="number" step="0.01" id="t_payout" placeholder="auto = price × weight"></div>
+        <div class="field"><label class="fl">Payout (RM)</label><input class="in" type="number" step="0.01" id="t_payout" placeholder="auto = price × (weight/1000)"></div>
         <div class="field"><label class="fl">Transaction Type</label><select class="in" id="t_type">${TXN_TYPES.map(x=>`<option>${x}</option>`).join('')}</select></div>
         <div class="field"><label class="fl">Collection Centre</label>${centreField}</div>
       </div>
