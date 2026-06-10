@@ -377,7 +377,7 @@ function openAdd(){
 }
 function autoPayout(){
   const p=parseFloat(val('t_price')), w=parseFloat(val('t_weight')); const out=document.getElementById('t_payout');
-  if(!out) return; if(!out.dataset.touched && !isNaN(p) && !isNaN(w)) out.value=(p*w).toFixed(2);
+  if(!out) return; if(!out.dataset.touched && !isNaN(p) && !isNaN(w)) out.value=(p*(w/1000)).toFixed(2);
 }
 function saveTxn(){
   const ticket=val('t_ticket').trim();
