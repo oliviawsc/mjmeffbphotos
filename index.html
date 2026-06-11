@@ -133,7 +133,27 @@
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green-900);color:#fff;padding:12px 20px;border-radius:11px;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.3);z-index:80;opacity:0;transition:.25s;pointer-events:none}
   .toast.show{opacity:1;bottom:34px}
   .remarks{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font-family:inherit;font-size:13px;resize:vertical;min-height:60px;outline:none}
-  @media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}.layout2{grid-template-columns:1fr}.ogrid{grid-template-columns:1fr 1fr}}
+  /* report */
+  .rpt-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+  .rpt-card{background:var(--paper);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);overflow:hidden}
+  .rpt-card .phead{padding:13px 16px}
+  .rpt-bar-row{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px}
+  .rpt-bar-row:last-child{border-bottom:none}
+  .rpt-bar-label{min-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink);font-weight:500}
+  .rpt-bar-track{flex:1;background:var(--line);border-radius:4px;height:8px;overflow:hidden}
+  .rpt-bar-fill{height:100%;border-radius:4px;background:var(--green-500);transition:.4s}
+  .rpt-bar-fill.amber{background:var(--amber)}
+  .rpt-bar-fill.blue{background:#4a90d9}
+  .rpt-bar-fill.red{background:var(--fruit)}
+  .rpt-bar-val{min-width:90px;text-align:right;font-family:'IBM Plex Mono';font-size:12px;color:var(--muted);font-weight:600}
+  .rpt-stat{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px}
+  .rpt-stat:last-child{border-bottom:none}
+  .rpt-stat .k{color:var(--muted)}
+  .rpt-stat .v{font-family:'IBM Plex Mono';font-weight:600;color:var(--green-900)}
+  .rpt-empty{text-align:center;padding:30px;color:var(--muted);font-size:13px}
+  .rpt-period{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+  .rpt-period label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}.layout2{grid-template-columns:1fr}.ogrid{grid-template-columns:1fr 1fr}.rpt-grid{grid-template-columns:1fr}}
   @media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.stage{padding:0 12px 50px}}
 </style>
 </head>
@@ -201,6 +221,7 @@ function renderNav(){
   const u=me(); const tabs=[];
   tabs.push(['dashboard','Dashboard']);
   tabs.push(['transactions','Transactions']);
+  tabs.push(['report','Analysis Report']);
   if(u.role==='admin') tabs.push(['users','User Management']);
   document.getElementById('nav').innerHTML = tabs.map(([k,l])=>
     `<button class="${state.tab===k?'on':''}" onclick="go('${k}')">${l}</button>`).join('');
@@ -217,6 +238,7 @@ function render(){
   const app=document.getElementById('app');
   if(state.tab==='dashboard') app.innerHTML=viewDashboard();
   else if(state.tab==='transactions') app.innerHTML=viewTransactions();
+  else if(state.tab==='report') app.innerHTML=viewReport();
   else if(state.tab==='users') app.innerHTML=viewUsers();
 }
 
@@ -303,6 +325,124 @@ function txnTable(list){
     </tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function labelStatus(s){ return {pending:'Pending',completed:'✓ Completed',approved:'Approved',rejected:'Rejected',returned:'↩ Returned'}[s]||s; }
+
+/* ---------- ANALYSIS REPORT ---------- */
+function viewReport(){
+  const all = scopedTxns();
+
+  // date range filter
+  const rFrom = state.rptFrom||'', rTo = state.rptTo||'';
+  const list = all.filter(t=>{
+    const d = (t.dateTime||'').slice(0,10);
+    if(rFrom && d < rFrom) return false;
+    if(rTo   && d > rTo)   return false;
+    return true;
+  });
+
+  const totalPayout = list.reduce((s,t)=>s+(+t.payout||0),0);
+  const totalWeight = list.reduce((s,t)=>s+(+t.nettWeight||0),0);
+  const totalTxns   = list.length;
+  const avgPrice    = list.filter(t=>+t.ffbPrice>0).reduce((s,t,_,a)=>s+(+t.ffbPrice)/a.length,0);
+
+  // helpers
+  function pct(v,max){ return max>0?Math.round(v/max*100):0; }
+  function barRow(label,val,max,fmt,colorClass=''){
+    return `<div class="rpt-bar-row">
+      <div class="rpt-bar-label" title="${esc(label)}">${esc(label)}</div>
+      <div class="rpt-bar-track"><div class="rpt-bar-fill ${colorClass}" style="width:${pct(val,max)}%"></div></div>
+      <div class="rpt-bar-val">${fmt(val)}</div>
+    </div>`;
+  }
+
+  // --- By Collection Centre ---
+  const centreMap={};
+  list.forEach(t=>{
+    const k=t.centre||'Unknown';
+    if(!centreMap[k]) centreMap[k]={payout:0,weight:0,count:0};
+    centreMap[k].payout+=(+t.payout||0);
+    centreMap[k].weight+=(+t.nettWeight||0);
+    centreMap[k].count++;
+  });
+  const centreRows = Object.entries(centreMap).sort((a,b)=>b[1].payout-a[1].payout);
+  const maxCPayout = centreRows.reduce((m,[,v])=>Math.max(m,v.payout),0);
+  const centreSection = centreRows.length
+    ? centreRows.map(([k,v])=>barRow(k,v.payout,maxCPayout,n=>'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}))).join('')
+    : `<div class="rpt-empty">No data</div>`;
+
+  // --- By Supplier ---
+  const supplierMap={};
+  list.forEach(t=>{
+    const k=t.supplier&&t.supplier.trim()?t.supplier.trim():'(Unknown)';
+    if(!supplierMap[k]) supplierMap[k]={payout:0,weight:0,count:0};
+    supplierMap[k].payout+=(+t.payout||0);
+    supplierMap[k].weight+=(+t.nettWeight||0);
+    supplierMap[k].count++;
+  });
+  const supplierRows = Object.entries(supplierMap).sort((a,b)=>b[1].payout-a[1].payout).slice(0,10);
+  const maxSPayout = supplierRows.reduce((m,[,v])=>Math.max(m,v.payout),0);
+  const supplierSection = supplierRows.length
+    ? supplierRows.map(([k,v])=>barRow(k,v.payout,maxSPayout,n=>'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}),'amber')).join('')
+    : `<div class="rpt-empty">No data</div>`;
+
+  // --- By Transaction Type ---
+  const typeMap={};
+  list.forEach(t=>{
+    const k=t.txnType||'Unknown';
+    if(!typeMap[k]) typeMap[k]={payout:0,count:0};
+    typeMap[k].payout+=(+t.payout||0);
+    typeMap[k].count++;
+  });
+  const typeRows = Object.entries(typeMap).sort((a,b)=>b[1].payout-a[1].payout);
+  const maxTPayout = typeRows.reduce((m,[,v])=>Math.max(m,v.payout),0);
+  const typeSection = typeRows.length
+    ? typeRows.map(([k,v])=>barRow(`${k} (${v.count} txn${v.count>1?'s':''})`,v.payout,maxTPayout,n=>'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}),'blue')).join('')
+    : `<div class="rpt-empty">No data</div>`;
+
+  // --- By Status ---
+  const statuses=['pending','completed','approved','rejected','returned'];
+  const statusMap={}; statuses.forEach(s=>statusMap[s]=0);
+  list.forEach(t=>{ if(statusMap[t.status]!==undefined) statusMap[t.status]++; else statusMap[t.status]=(statusMap[t.status]||0)+1; });
+  const statusColors={pending:'amber',completed:'',approved:'blue',rejected:'red',returned:'amber'};
+  const maxSCount = Math.max(...Object.values(statusMap),1);
+  const statusSection = Object.entries(statusMap).filter(([,v])=>v>0).map(([k,v])=>
+    barRow(`${labelStatus(k)} (${v})`,v,maxSCount,n=>n+' txn'+(n>1?'s':''),statusColors[k]||'')
+  ).join('') || `<div class="rpt-empty">No data</div>`;
+
+  return `
+  <div class="rowb"><div><h1 class="page">Analysis Report</h1><div class="sub">Transaction breakdown · ${esc(me().role==='teller'?me().centre:'all centres')}</div></div>
+    <button class="btn ghost sm" onclick="window.print()">🖨 Print</button></div>
+  <div class="rpt-period">
+    <label>From</label>
+    <input class="in" type="date" style="width:160px;padding:7px 10px" value="${rFrom}" onchange="state.rptFrom=this.value;render()">
+    <label>To</label>
+    <input class="in" type="date" style="width:160px;padding:7px 10px" value="${rTo}" onchange="state.rptTo=this.value;render()">
+    ${(rFrom||rTo)?`<button class="btn ghost sm" onclick="state.rptFrom='';state.rptTo='';render()">Clear</button>`:''}
+  </div>
+  <div class="kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
+    <div class="kpi"><div class="lbl">Total Transactions</div><div class="num">${totalTxns}</div><div class="unit">records</div></div>
+    <div class="kpi"><div class="lbl">Total Payout</div><div class="num">${money(totalPayout).replace('RM ','')}</div><div class="unit">RM</div></div>
+    <div class="kpi"><div class="lbl">Total Weight</div><div class="num">${(totalWeight/1000).toLocaleString('en-MY',{maximumFractionDigits:2})}</div><div class="unit">MT</div></div>
+    <div class="kpi amber"><div class="lbl">Avg FFB Price</div><div class="num">${avgPrice>0?avgPrice.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</div><div class="unit">RM / MT</div></div>
+  </div>
+  <div class="rpt-grid">
+    <div class="rpt-card">
+      <div class="phead"><h2>Payout by Collection Centre</h2></div>
+      ${centreSection}
+    </div>
+    <div class="rpt-card">
+      <div class="phead"><h2>Top Suppliers by Payout</h2></div>
+      ${supplierSection}
+    </div>
+    <div class="rpt-card">
+      <div class="phead"><h2>Payout by Transaction Type</h2></div>
+      ${typeSection}
+    </div>
+    <div class="rpt-card">
+      <div class="phead"><h2>Transactions by Status</h2></div>
+      ${statusSection}
+    </div>
+  </div>`;
+}
 
 /* ---------- USERS ---------- */
 function viewUsers(){
