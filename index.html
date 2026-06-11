@@ -331,11 +331,12 @@ function viewReport(){
   const all = scopedTxns();
 
   // date range filter
-  const rFrom = state.rptFrom||'', rTo = state.rptTo||'';
+  const rFrom = state.rptFrom||'', rTo = state.rptTo||'', rCentre = state.rptCentre||'';
   const list = all.filter(t=>{
     const d = (t.dateTime||'').slice(0,10);
     if(rFrom && d < rFrom) return false;
     if(rTo   && d > rTo)   return false;
+    if(rCentre && t.centre !== rCentre) return false;
     return true;
   });
 
@@ -408,15 +409,22 @@ function viewReport(){
     barRow(`${labelStatus(k)} (${v})`,v,maxSCount,n=>n+' txn'+(n>1?'s':''),statusColors[k]||'')
   ).join('') || `<div class="rpt-empty">No data</div>`;
 
+  const u=me();
+  const centreOpts = u.role!=='teller'
+    ? `<option value="">All centres</option>`+CENTRES.map(c=>`<option value="${esc(c)}" ${rCentre===c?'selected':''}>${esc(c)}</option>`).join('')
+    : `<option value="${esc(u.centre)}">${esc(u.centre)}</option>`;
+  const hasFilter = rFrom||rTo||rCentre;
   return `
-  <div class="rowb"><div><h1 class="page">Analysis Report</h1><div class="sub">Transaction breakdown · ${esc(me().role==='teller'?me().centre:'all centres')}</div></div>
+  <div class="rowb"><div><h1 class="page">Analysis Report</h1><div class="sub">Transaction breakdown · ${esc(rCentre||me().role==='teller'?rCentre||me().centre:'all centres')}</div></div>
     <button class="btn ghost sm" onclick="window.print()">🖨 Print</button></div>
   <div class="rpt-period">
+    <label>Centre</label>
+    <select class="in" style="width:220px;padding:7px 10px" onchange="state.rptCentre=this.value;render()" ${u.role==='teller'?'disabled':''}>${centreOpts}</select>
     <label>From</label>
     <input class="in" type="date" style="width:160px;padding:7px 10px" value="${rFrom}" onchange="state.rptFrom=this.value;render()">
     <label>To</label>
     <input class="in" type="date" style="width:160px;padding:7px 10px" value="${rTo}" onchange="state.rptTo=this.value;render()">
-    ${(rFrom||rTo)?`<button class="btn ghost sm" onclick="state.rptFrom='';state.rptTo='';render()">Clear</button>`:''}
+    ${hasFilter?`<button class="btn ghost sm" onclick="state.rptFrom='';state.rptTo='';state.rptCentre='';render()">Clear</button>`:''}
   </div>
   <div class="kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
     <div class="kpi"><div class="lbl">Total Transactions</div><div class="num">${totalTxns}</div><div class="unit">records</div></div>
