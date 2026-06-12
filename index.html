@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --green-900:#10241a;--green-700:#1c4533;--green-600:#226347;--green-500:#2e8b5e;--green-100:#dcefe3;
@@ -178,6 +179,51 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* ---------------- SUPABASE ---------------- */
+const _sb = supabase.createClient(
+  'https://ujdmywiwwrknvenzfpan.supabase.co',
+  'sb_publishable_PhqzkO4P92UqnHY-IiQjHw_UyMf_EkS'
+);
+
+function txnToDb(t){
+  return {
+    id:t.id, date_time:t.dateTime||null, ticket_no:t.ticketNo,
+    supplier:t.supplier||null, vehicle:t.vehicle||null,
+    ffb_price:t.ffbPrice!==''&&t.ffbPrice!=null?+t.ffbPrice:null,
+    nett_weight:t.nettWeight!==''&&t.nettWeight!=null?+t.nettWeight:null,
+    payout:t.payout!==''&&t.payout!=null?+t.payout:null,
+    txn_type:t.txnType||null, centre:t.centre||null, status:t.status||'pending',
+    remarks:t.remarks||null, teller_name:t.tellerName||null,
+    created_by:t.createdBy||null, created_at:t.createdAt||null,
+    completed_by:t.completedBy||null, completed_at:t.completedAt||null,
+    reviewed_by:t.reviewedBy||null, reviewed_at:t.reviewedAt||null,
+    returned_at:t.returnedAt||null, resubmitted_at:t.resubmittedAt||null,
+    photos:t.photos||{}
+  };
+}
+function dbToTxn(r){
+  return {
+    id:r.id, dateTime:r.date_time||'', ticketNo:r.ticket_no,
+    supplier:r.supplier||'', vehicle:r.vehicle||'',
+    ffbPrice:r.ffb_price!=null?String(r.ffb_price):'',
+    nettWeight:r.nett_weight!=null?String(r.nett_weight):'',
+    payout:r.payout!=null?String(r.payout):'',
+    txnType:r.txn_type||'', centre:r.centre||'', status:r.status||'pending',
+    remarks:r.remarks||'', tellerName:r.teller_name||'',
+    createdBy:r.created_by||'', createdAt:r.created_at||null,
+    completedBy:r.completed_by||'', completedAt:r.completed_at||null,
+    reviewedBy:r.reviewed_by||'', reviewedAt:r.reviewed_at||null,
+    returnedAt:r.returned_at||null, resubmittedAt:r.resubmitted_at||null,
+    photos:r.photos||{}
+  };
+}
+async function loadTxns(){
+  const {data,error}=await _sb.from('transactions').select('*').order('date_time',{ascending:false});
+  if(error){ toast('DB error: '+error.message); return; }
+  state.txns=(data||[]).map(dbToTxn);
+  render();
+}
+
 /* ---------------- DATA ---------------- */
 const CENTRES = ["Bekenu Collection Centre","Beraya Collection Centre","Karabungan Collection Centre","Kejapil Collection Centre","Mill Collection Centre","Pelapi Collection Centre","Tegageng Collection Centre"];
 const TXN_TYPES = ["Credit","E-Bayaran","Cash"];
@@ -527,7 +573,7 @@ function autoPayout(){
   const p=parseFloat(val('t_price')), w=parseFloat(val('t_weight')); const out=document.getElementById('t_payout');
   if(!out) return; if(!out.dataset.touched && !isNaN(p) && !isNaN(w)) out.value=(p*(w/1000)).toFixed(2);
 }
-function saveTxn(){
+async function saveTxn(){
   const ticket=val('t_ticket').trim();
   if(!ticket){ toast('Ticket No. is required'); return; }
   if(state.txns.some(t=>t.ticketNo.toLowerCase()===ticket.toLowerCase())){ toast('That ticket number already exists'); return; }
@@ -536,7 +582,9 @@ function saveTxn(){
     vehicle:val('t_vehicle').trim(), ffbPrice:val('t_price'), nettWeight:val('t_weight'),
     payout:val('t_payout'), txnType:val('t_type'), centre, status:'pending',
     photos:{}, remarks:'', tellerName:me().role==='teller'?me().fullName:'', createdBy:me().fullName, createdAt:Date.now() };
-  state.txns.push(t); closeModal(); toast('Transaction created'); state.tab='transactions'; render();
+  const {error}=await _sb.from('transactions').insert(txnToDb(t));
+  if(error){ toast('Save failed: '+error.message); return; }
+  state.txns.unshift(t); closeModal(); toast('Transaction created'); state.tab='transactions'; render();
   openTxn(t.id);
 }
 
@@ -621,15 +669,18 @@ function processPhoto(file){
       lines.forEach((ln,i)=>ctx.fillText(ln,pad,h-boxH+pad/2+i*lh));
       const dataUrl=c.toDataURL('image/jpeg',0.72);
       t.photos[pendingType]={dataUrl, ts:Date.now(), by:me().fullName};
+      _sb.from('transactions').update({photos:t.photos}).eq('id',t.id).then(({error})=>{
+        if(error) toast('Photo saved locally but sync failed');
+      });
       pendingType=null; openTxn(t.id); toast('Photo added & watermarked');
     };
     img.src=e.target.result;
   };
   reader.readAsDataURL(file);
 }
-function completeTxn(id){
+async function completeTxn(id){
   const t=state.txns.find(x=>x.id===id); if(!t) return;
-  if(photoCount(t)<3){ toast('All 3 photos are required'); return; } // enforced
+  if(photoCount(t)<3){ toast('All 3 photos are required'); return; }
   const wasReturned = t.status==='returned';
   if(wasReturned){
     const replaced = PHOTOS.some(p=>t.photos[p.id] && t.photos[p.id].ts > (t.returnedAt||0));
@@ -637,15 +688,25 @@ function completeTxn(id){
     t.resubmittedAt=Date.now();
   }
   t.status='completed'; t.completedBy=me().fullName; t.completedAt=Date.now();
+  const {error}=await _sb.from('transactions').update({
+    status:t.status, completed_by:t.completedBy, completed_at:t.completedAt,
+    resubmitted_at:t.resubmittedAt||null
+  }).eq('id',id);
+  if(error){ toast('Update failed: '+error.message); return; }
   openTxn(id); toast(wasReturned?'Resubmitted for approval ✓':'Transaction completed ✓');
 }
-function reviewTxn(id,decision){
+async function reviewTxn(id,decision){
   const t=state.txns.find(x=>x.id===id); if(!t) return;
   const r=val('t_remarks');
   if(decision==='returned' && !r.trim()){ toast('Add a remark so the teller knows what to fix'); return; }
   t.remarks=r; t.reviewedBy=me().fullName; t.reviewedAt=Date.now();
   if(decision==='returned'){ t.status='returned'; t.returnedAt=Date.now(); }
   else { t.status='approved'; }
+  const {error}=await _sb.from('transactions').update({
+    status:t.status, remarks:t.remarks, reviewed_by:t.reviewedBy,
+    reviewed_at:t.reviewedAt, returned_at:t.returnedAt||null
+  }).eq('id',id);
+  if(error){ toast('Update failed: '+error.message); return; }
   closeModal(); render(); toast(decision==='approved'?'Approved ✓':'Returned to teller for correction');
 }
 
@@ -664,13 +725,24 @@ function importData(file){
   if(!file) return; const r=new FileReader();
   r.onload=e=>{ try{ const d=JSON.parse(e.target.result);
       if(Array.isArray(d.users)) state.users=d.users;
-      if(Array.isArray(d.txns)) state.txns=d.txns;
       if(!state.users.some(u=>u.id===state.currentUserId)) state.currentUserId=state.users[0]?.id;
-      render(); toast('Data imported'); }catch(err){ toast('Invalid file'); } };
+      if(Array.isArray(d.txns) && d.txns.length){
+        const rows=d.txns.map(txnToDb);
+        _sb.from('transactions').upsert(rows,{onConflict:'id'}).then(({error})=>{
+          if(error){ toast('Import sync failed: '+error.message); return; }
+          loadTxns(); toast('Data imported & synced');
+        });
+      } else { render(); toast('Data imported'); }
+    }catch(err){ toast('Invalid file'); } };
   r.readAsText(file);
 }
 
-render();
+// Boot: load transactions from Supabase, then set up realtime
+loadTxns().then(()=>{
+  _sb.channel('txn-changes')
+    .on('postgres_changes',{event:'*',schema:'public',table:'transactions'},()=>loadTxns())
+    .subscribe();
+});
 </script>
 </body>
 </html>
