@@ -243,7 +243,7 @@ let state = {
   txns: [],
   currentUserId: "u_admin",
   tab: "dashboard",
-  filters: {date:"", centre:"", teller:"", q:""}
+  filters: {dateFrom:"", dateTo:"", centre:"", teller:"", q:""}
 };
 
 const me = () => state.users.find(u=>u.id===state.currentUserId) || state.users[0];
@@ -295,22 +295,25 @@ function filterBar(){
     : `<option value="${u.centre}">${u.centre}</option>`;
   const tellers=[...new Set(state.users.filter(x=>x.role==='teller').map(x=>x.fullName))];
   return `<div class="filters">
-    <div class="filt"><b>Date</b><input type="date" value="${f.date}" onchange="setFilter('date',this.value)"></div>
+    <div class="filt"><b>From</b><input type="date" value="${f.dateFrom||''}" onchange="setFilter('dateFrom',this.value)"></div>
+    <div class="filt"><b>To</b><input type="date" value="${f.dateTo||''}" onchange="setFilter('dateTo',this.value)"></div>
     <div class="filt"><b>Centre</b><select onchange="setFilter('centre',this.value)" ${u.role==='teller'?'disabled':''}>${centreOpts}</select></div>
     <div class="filt"><b>Teller</b><select onchange="setFilter('teller',this.value)"><option value="">All</option>${tellers.map(t=>`<option ${f.teller===t?'selected':''}>${esc(t)}</option>`).join('')}</select></div>
     <div class="filt"><b>Search</b><input type="text" placeholder="ticket / vehicle / supplier" value="${esc(f.q)}" oninput="setFilter('q',this.value)" style="min-width:180px"></div>
-    ${(f.date||f.centre||f.teller||f.q)?`<button class="btn ghost sm" onclick="clearFilters()">Clear</button>`:''}
+    ${(f.dateFrom||f.dateTo||f.centre||f.teller||f.q)?`<button class="btn ghost sm" onclick="clearFilters()">Clear</button>`:''}
   </div>`;
 }
 function setFilter(k,v){ state.filters[k]=v; render(); }
-function clearFilters(){ state.filters={date:"",centre:"",teller:"",q:""}; render(); }
+function clearFilters(){ state.filters={dateFrom:"",dateTo:"",centre:"",teller:"",q:""}; render(); }
 
 function applyFilters(list){
   const f=state.filters;
   return list.filter(t=>{
     if(f.centre && t.centre!==f.centre) return false;
     if(f.teller && t.tellerName!==f.teller) return false;
-    if(f.date && (t.dateTime||"").slice(0,10)!==f.date) return false;
+    const d=(t.dateTime||'').slice(0,10);
+    if(f.dateFrom && d < f.dateFrom) return false;
+    if(f.dateTo   && d > f.dateTo)   return false;
     if(f.q){ const q=f.q.toLowerCase(); const hay=[t.ticketNo,t.vehicle,t.supplier,t.centre,t.txnType].join(" ").toLowerCase(); if(!hay.includes(q)) return false; }
     return true;
   });
@@ -324,7 +327,7 @@ function viewDashboard(){
   const weight=list.reduce((s,t)=>s+(+t.nettWeight||0),0);
   const completed=list.filter(t=>t.status==='completed'||t.status==='approved').length;
   const pending=list.filter(t=>t.status==='pending').length;
-  const missing=list.filter(t=>photoCount(t)<3).length;
+  const returned=list.filter(t=>t.status==='returned').length;
   const kpi=(l,n,u,cls='')=>`<div class="kpi ${cls}"><div class="lbl">${l}</div><div class="num">${n}</div><div class="unit">${u}</div></div>`;
   return `
   <div class="rowb"><div><h1 class="page">Daily Summary Dashboard</h1><div class="sub">Live overview · ${esc(me().role==='teller'?me().centre:'all centres')}</div></div>
@@ -335,8 +338,8 @@ function viewDashboard(){
     ${kpi('Cash Payout',money(payout).replace('RM ',''),'RM')}
     ${kpi('Weight Collected',(weight/1000).toLocaleString('en-MY',{maximumFractionDigits:2}),'tonnes')}
     ${kpi('Completed',completed,'records')}
-    ${kpi('Pending',pending,'awaiting photos','amber')}
-    ${kpi('Missing Photos',missing,'need attention','red')}
+    ${kpi('Pending',pending,'awaiting approval','amber')}
+    ${kpi('Returned',returned,'need correction','red')}
   </div>
   ${txnTable(list)}`;
 }
