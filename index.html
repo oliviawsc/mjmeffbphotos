@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
   :root{
     --green-900:#10241a;--green-700:#1c4533;--green-600:#226347;--green-500:#2e8b5e;--green-100:#dcefe3;
@@ -154,6 +155,11 @@
   .rpt-empty{text-align:center;padding:30px;color:var(--muted);font-size:13px}
   .rpt-period{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
   .rpt-period label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  .rpt-tabs{display:flex;gap:0;border-bottom:2px solid var(--line);margin-bottom:22px}
+  .rpt-tab{background:none;border:none;font-family:'Archivo';font-weight:600;font-size:13.5px;color:var(--muted);padding:11px 20px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:.15s}
+  .rpt-tab:hover{color:var(--green-700)}
+  .rpt-tab.on{color:var(--green-700);border-bottom-color:var(--amber)}
+  .chart-wrap{padding:16px 20px;background:var(--paper);position:relative;min-height:240px}
   @media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}.layout2{grid-template-columns:1fr}.ogrid{grid-template-columns:1fr 1fr}.rpt-grid{grid-template-columns:1fr}}
   @media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.stage{padding:0 12px 50px}}
 </style>
@@ -284,7 +290,7 @@ function render(){
   const app=document.getElementById('app');
   if(state.tab==='dashboard') app.innerHTML=viewDashboard();
   else if(state.tab==='transactions') app.innerHTML=viewTransactions();
-  else if(state.tab==='report') app.innerHTML=viewReport();
+  else if(state.tab==='report'){ app.innerHTML=viewReport(); initReportCharts(); }
   else if(state.tab==='users') app.innerHTML=viewUsers();
 }
 
@@ -376,129 +382,233 @@ function txnTable(list){
 function labelStatus(s){ return {pending:'Pending',completed:'✓ Completed',approved:'Approved',rejected:'Rejected',returned:'↩ Returned'}[s]||s; }
 
 /* ---------- ANALYSIS REPORT ---------- */
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function rptYears(){ const y=new Date().getFullYear(),a=[]; for(let i=y;i>=y-5;i--) a.push(i); return a; }
+
 function viewReport(){
-  const all = scopedTxns();
-
-  // date range filter
-  const rFrom = state.rptFrom||'', rTo = state.rptTo||'', rCentre = state.rptCentre||'';
-  const list = all.filter(t=>{
-    const d = (t.dateTime||'').slice(0,10);
-    if(rFrom && d < rFrom) return false;
-    if(rTo   && d > rTo)   return false;
-    if(rCentre && t.centre !== rCentre) return false;
-    return true;
-  });
-
-  const totalPayout = list.reduce((s,t)=>s+(+t.payout||0),0);
-  const totalWeight = list.reduce((s,t)=>s+(+t.nettWeight||0),0);
-  const totalTxns   = list.length;
-  const avgPrice    = list.filter(t=>+t.ffbPrice>0).reduce((s,t,_,a)=>s+(+t.ffbPrice)/a.length,0);
-
-  // helpers
-  function pct(v,max){ return max>0?Math.round(v/max*100):0; }
-  function barRow(label,val,max,fmt,colorClass=''){
-    return `<div class="rpt-bar-row">
-      <div class="rpt-bar-label" title="${esc(label)}">${esc(label)}</div>
-      <div class="rpt-bar-track"><div class="rpt-bar-fill ${colorClass}" style="width:${pct(val,max)}%"></div></div>
-      <div class="rpt-bar-val">${fmt(val)}</div>
-    </div>`;
-  }
-
-  // --- By Collection Centre ---
-  const centreMap={};
-  list.forEach(t=>{
-    const k=t.centre||'Unknown';
-    if(!centreMap[k]) centreMap[k]={payout:0,weight:0,count:0};
-    centreMap[k].payout+=(+t.payout||0);
-    centreMap[k].weight+=(+t.nettWeight||0);
-    centreMap[k].count++;
-  });
-  const centreRows = Object.entries(centreMap).sort((a,b)=>b[1].payout-a[1].payout);
-  const maxCPayout = centreRows.reduce((m,[,v])=>Math.max(m,v.payout),0);
-  const centreSection = centreRows.length
-    ? centreRows.map(([k,v])=>barRow(k,v.payout,maxCPayout,n=>'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}))).join('')
-    : `<div class="rpt-empty">No data</div>`;
-
-  // --- By Supplier ---
-  const supplierMap={};
-  list.forEach(t=>{
-    const k=t.supplier&&t.supplier.trim()?t.supplier.trim():'(Unknown)';
-    if(!supplierMap[k]) supplierMap[k]={payout:0,weight:0,count:0};
-    supplierMap[k].payout+=(+t.payout||0);
-    supplierMap[k].weight+=(+t.nettWeight||0);
-    supplierMap[k].count++;
-  });
-  const supplierRows = Object.entries(supplierMap).sort((a,b)=>b[1].payout-a[1].payout).slice(0,10);
-  const maxSPayout = supplierRows.reduce((m,[,v])=>Math.max(m,v.payout),0);
-  const supplierSection = supplierRows.length
-    ? supplierRows.map(([k,v])=>barRow(k,v.payout,maxSPayout,n=>'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}),'amber')).join('')
-    : `<div class="rpt-empty">No data</div>`;
-
-  // --- By Transaction Type ---
-  const typeMap={};
-  list.forEach(t=>{
-    const k=t.txnType||'Unknown';
-    if(!typeMap[k]) typeMap[k]={payout:0,count:0};
-    typeMap[k].payout+=(+t.payout||0);
-    typeMap[k].count++;
-  });
-  const typeRows = Object.entries(typeMap).sort((a,b)=>b[1].payout-a[1].payout);
-  const maxTPayout = typeRows.reduce((m,[,v])=>Math.max(m,v.payout),0);
-  const typeSection = typeRows.length
-    ? typeRows.map(([k,v])=>barRow(`${k} (${v.count} txn${v.count>1?'s':''})`,v.payout,maxTPayout,n=>'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}),'blue')).join('')
-    : `<div class="rpt-empty">No data</div>`;
-
-  // --- By Status ---
-  const statuses=['pending','completed','approved','rejected','returned'];
-  const statusMap={}; statuses.forEach(s=>statusMap[s]=0);
-  list.forEach(t=>{ if(statusMap[t.status]!==undefined) statusMap[t.status]++; else statusMap[t.status]=(statusMap[t.status]||0)+1; });
-  const statusColors={pending:'amber',completed:'',approved:'blue',rejected:'red',returned:'amber'};
-  const maxSCount = Math.max(...Object.values(statusMap),1);
-  const statusSection = Object.entries(statusMap).filter(([,v])=>v>0).map(([k,v])=>
-    barRow(`${labelStatus(k)} (${v})`,v,maxSCount,n=>n+' txn'+(n>1?'s':''),statusColors[k]||'')
-  ).join('') || `<div class="rpt-empty">No data</div>`;
-
-  const u=me();
-  const centreOpts = u.role!=='teller'
-    ? `<option value="">All centres</option>`+CENTRES.map(c=>`<option value="${esc(c)}" ${rCentre===c?'selected':''}>${esc(c)}</option>`).join('')
-    : `<option value="${esc(u.centre)}">${esc(u.centre)}</option>`;
-  const hasFilter = rFrom||rTo||rCentre;
-  return `
-  <div class="rowb"><div><h1 class="page">Analysis Report</h1><div class="sub">Transaction breakdown · ${esc(rCentre||me().role==='teller'?rCentre||me().centre:'all centres')}</div></div>
+  const sub=state.rptSub||'sales';
+  return `<div class="rowb"><div><h1 class="page">Analysis Report</h1><div class="sub">Monthly analytics</div></div>
     <button class="btn ghost sm" onclick="window.print()">🖨 Print</button></div>
-  <div class="rpt-period">
-    <label>Centre</label>
-    <select class="in" style="width:220px;padding:7px 10px" onchange="state.rptCentre=this.value;render()" ${u.role==='teller'?'disabled':''}>${centreOpts}</select>
-    <label>From</label>
-    <input class="in" type="date" style="width:160px;padding:7px 10px" value="${rFrom}" onchange="state.rptFrom=this.value;render()">
-    <label>To</label>
-    <input class="in" type="date" style="width:160px;padding:7px 10px" value="${rTo}" onchange="state.rptTo=this.value;render()">
-    ${hasFilter?`<button class="btn ghost sm" onclick="state.rptFrom='';state.rptTo='';state.rptCentre='';render()">Clear</button>`:''}
+  <div class="rpt-tabs">
+    <button class="rpt-tab ${sub==='sales'?'on':''}" onclick="state.rptSub='sales';render()">Sales Report</button>
+    <button class="rpt-tab ${sub==='trip'?'on':''}" onclick="state.rptSub='trip';render()">FFB Trip Report by Supplier</button>
   </div>
-  <div class="kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
-    <div class="kpi"><div class="lbl">Total Transactions</div><div class="num">${totalTxns}</div><div class="unit">records</div></div>
-    <div class="kpi"><div class="lbl">Total Payout</div><div class="num">${money(totalPayout).replace('RM ','')}</div><div class="unit">RM</div></div>
-    <div class="kpi"><div class="lbl">Total Weight</div><div class="num">${(totalWeight/1000).toLocaleString('en-MY',{maximumFractionDigits:2})}</div><div class="unit">MT</div></div>
-    <div class="kpi amber"><div class="lbl">Avg FFB Price</div><div class="num">${avgPrice>0?avgPrice.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</div><div class="unit">RM / MT</div></div>
+  ${sub==='sales'?viewSalesReport():viewTripReport()}`;
+}
+
+function viewSalesReport(){
+  const now=new Date();
+  const rY=state.rptYear!=null?+state.rptYear:now.getFullYear();
+  const rM=state.rptMonth!=null?+state.rptMonth:now.getMonth()+1;
+  const years=rptYears();
+  const fmt3=n=>n.toLocaleString('en-MY',{minimumFractionDigits:3,maximumFractionDigits:3});
+  const fmt2=n=>n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const list=scopedTxns().filter(t=>{
+    if(!t.dateTime) return false;
+    const d=new Date(t.dateTime);
+    return d.getFullYear()===rY && d.getMonth()+1===rM;
+  });
+
+  const centreMap={};
+  CENTRES.forEach(c=>centreMap[c]={tonnes:0,payout:0,trips:0});
+  list.forEach(t=>{
+    const k=t.centre||'(Unknown)';
+    if(!centreMap[k]) centreMap[k]={tonnes:0,payout:0,trips:0};
+    centreMap[k].tonnes+=(+t.nettWeight||0)/1000;
+    centreMap[k].payout+=(+t.payout||0);
+    centreMap[k].trips++;
+  });
+
+  const rows=Object.entries(centreMap).filter(([,v])=>v.trips>0).sort((a,b)=>b[1].tonnes-a[1].tonnes);
+  const totTonnes=rows.reduce((s,[,v])=>s+v.tonnes,0);
+  const totPayout=rows.reduce((s,[,v])=>s+v.payout,0);
+  const totTrips=rows.reduce((s,[,v])=>s+v.trips,0);
+
+  const tableRows=rows.map(([k,v])=>`<tr>
+    <td>${esc(k)}</td>
+    <td class="mono" style="text-align:right">${v.trips}</td>
+    <td class="mono" style="text-align:right">${fmt3(v.tonnes)}</td>
+    <td class="mono" style="text-align:right">RM ${fmt2(v.payout)}</td>
+  </tr>`).join('');
+
+  return `<div class="rpt-period">
+    <label>Month</label>
+    <select class="in" style="width:150px;padding:7px 10px" onchange="state.rptMonth=+this.value;render()">
+      ${MONTHS.map((m,i)=>`<option value="${i+1}" ${rM===i+1?'selected':''}>${m}</option>`).join('')}
+    </select>
+    <label>Year</label>
+    <select class="in" style="width:100px;padding:7px 10px" onchange="state.rptYear=+this.value;render()">
+      ${years.map(y=>`<option value="${y}" ${rY===y?'selected':''}>${y}</option>`).join('')}
+    </select>
   </div>
-  <div class="rpt-grid">
-    <div class="rpt-card">
-      <div class="phead"><h2>Payout by Collection Centre</h2></div>
-      ${centreSection}
-    </div>
-    <div class="rpt-card">
-      <div class="phead"><h2>Top Suppliers by Payout</h2></div>
-      ${supplierSection}
-    </div>
-    <div class="rpt-card">
-      <div class="phead"><h2>Payout by Transaction Type</h2></div>
-      ${typeSection}
-    </div>
-    <div class="rpt-card">
-      <div class="phead"><h2>Transactions by Status</h2></div>
-      ${statusSection}
-    </div>
+  <div class="rpt-card" style="margin-bottom:18px">
+    <div class="phead"><h2>Tonnage &amp; Payout by Collection Centre — ${MONTHS[rM-1]} ${rY}</h2></div>
+    <div class="chart-wrap"><canvas id="salesChart"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="phead"><h2>Sales Summary</h2></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Collection Centre</th><th style="text-align:right">Trips</th><th style="text-align:right">Tonnage (MT)</th><th style="text-align:right">Payout (RM)</th></tr></thead>
+      <tbody>
+        ${tableRows||'<tr><td colspan="4"><div class="rpt-empty">No transactions for this period</div></td></tr>'}
+        ${rows.length?`<tr style="font-weight:700;background:#f3efe4">
+          <td>TOTAL</td>
+          <td class="mono" style="text-align:right">${totTrips}</td>
+          <td class="mono" style="text-align:right">${fmt3(totTonnes)}</td>
+          <td class="mono" style="text-align:right">RM ${fmt2(totPayout)}</td>
+        </tr>`:''}
+      </tbody>
+    </table></div>
   </div>`;
+}
+
+function viewTripReport(){
+  const now=new Date();
+  const rY=state.rptTripYear!=null?+state.rptTripYear:now.getFullYear();
+  const rM=state.rptTripMonth!=null?+state.rptTripMonth:now.getMonth()+1;
+  const rSup=state.rptTripSup||'';
+  const years=rptYears();
+  const fmt3=n=>n.toLocaleString('en-MY',{minimumFractionDigits:3,maximumFractionDigits:3});
+  const fmt2=n=>n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const p2=x=>String(x).padStart(2,'0');
+
+  const periodList=scopedTxns().filter(t=>{
+    if(!t.dateTime) return false;
+    const d=new Date(t.dateTime);
+    return d.getFullYear()===rY && d.getMonth()+1===rM;
+  });
+
+  const suppliers=[...new Set(periodList.map(t=>(t.supplier||'').trim()).filter(Boolean))].sort();
+  const list=rSup?periodList.filter(t=>(t.supplier||'').trim()===rSup):periodList;
+  const sorted=list.slice().sort((a,b)=>(a.dateTime||'').localeCompare(b.dateTime||''));
+
+  const tableRows=sorted.map(t=>{
+    const dt=t.dateTime?new Date(t.dateTime):null;
+    const dateStr=dt?`${p2(dt.getDate())}/${p2(dt.getMonth()+1)}/${dt.getFullYear()}`:'—';
+    const timeStr=dt?`${p2(dt.getHours())}:${p2(dt.getMinutes())}`:'—';
+    const tonnes=(+t.nettWeight||0)/1000;
+    return `<tr>
+      <td class="mono">${dateStr}</td>
+      <td class="tnum">${esc(t.ticketNo)}</td>
+      <td class="mono">${esc(t.vehicle||'—')}</td>
+      <td class="mono" style="text-align:right">${timeStr}</td>
+      <td class="mono" style="text-align:right">${fmt3(tonnes)}</td>
+      <td class="mono" style="text-align:right">RM ${fmt2(+t.payout||0)}</td>
+    </tr>`;
+  }).join('');
+
+  const totTonnes=sorted.reduce((s,t)=>s+(+t.nettWeight||0)/1000,0);
+  const totPayout=sorted.reduce((s,t)=>s+(+t.payout||0),0);
+
+  return `<div class="rpt-period">
+    <label>Month</label>
+    <select class="in" style="width:150px;padding:7px 10px" onchange="state.rptTripMonth=+this.value;render()">
+      ${MONTHS.map((m,i)=>`<option value="${i+1}" ${rM===i+1?'selected':''}>${m}</option>`).join('')}
+    </select>
+    <label>Year</label>
+    <select class="in" style="width:100px;padding:7px 10px" onchange="state.rptTripYear=+this.value;render()">
+      ${years.map(y=>`<option value="${y}" ${rY===y?'selected':''}>${y}</option>`).join('')}
+    </select>
+    <label>Supplier</label>
+    <select class="in" style="width:200px;padding:7px 10px" onchange="state.rptTripSup=this.value;render()">
+      <option value="">All Suppliers</option>
+      ${suppliers.map(s=>`<option value="${esc(s)}" ${rSup===s?'selected':''}>${esc(s)}</option>`).join('')}
+    </select>
+  </div>
+  <div class="rpt-card" style="margin-bottom:18px">
+    <div class="phead"><h2>Tonnage &amp; Payout by Supplier — ${MONTHS[rM-1]} ${rY}${rSup?' · '+esc(rSup):''}</h2></div>
+    <div class="chart-wrap"><canvas id="tripChart"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="phead"><h2>FFB Trip Details${rSup?' — '+esc(rSup):''}</h2></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Date</th><th>Ticket No.</th><th>Vehicle No.</th><th style="text-align:right">Time Out</th><th style="text-align:right">Weight (MT)</th><th style="text-align:right">Paid Out (RM)</th></tr></thead>
+      <tbody>
+        ${tableRows||'<tr><td colspan="6"><div class="rpt-empty">No transactions for this period</div></td></tr>'}
+        ${sorted.length?`<tr style="font-weight:700;background:#f3efe4">
+          <td colspan="4" style="text-align:right">TOTAL</td>
+          <td class="mono" style="text-align:right">${fmt3(totTonnes)}</td>
+          <td class="mono" style="text-align:right">RM ${fmt2(totPayout)}</td>
+        </tr>`:''}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+function initReportCharts(){
+  if(typeof Chart==='undefined') return;
+  const sub=state.rptSub||'sales';
+  const now=new Date();
+  const GREEN='rgba(46,139,94,0.8)', AMBER='rgba(232,130,30,0.8)';
+  const dualOpts={
+    responsive:true, maintainAspectRatio:true,
+    scales:{
+      y:{type:'linear',position:'left',title:{display:true,text:'Tonnage (MT)'},grid:{color:'rgba(0,0,0,0.04)'}},
+      y1:{type:'linear',position:'right',title:{display:true,text:'Payout (RM)'},grid:{drawOnChartArea:false}}
+    },
+    plugins:{legend:{position:'top'}}
+  };
+
+  if(sub==='sales'){
+    const canvas=document.getElementById('salesChart'); if(!canvas) return;
+    const rY=state.rptYear!=null?+state.rptYear:now.getFullYear();
+    const rM=state.rptMonth!=null?+state.rptMonth:now.getMonth()+1;
+    const list=scopedTxns().filter(t=>{
+      if(!t.dateTime) return false;
+      const d=new Date(t.dateTime);
+      return d.getFullYear()===rY && d.getMonth()+1===rM;
+    });
+    const centreMap={};
+    CENTRES.forEach(c=>centreMap[c]={tonnes:0,payout:0});
+    list.forEach(t=>{
+      const k=t.centre||'(Unknown)';
+      if(!centreMap[k]) centreMap[k]={tonnes:0,payout:0};
+      centreMap[k].tonnes+=(+t.nettWeight||0)/1000;
+      centreMap[k].payout+=(+t.payout||0);
+    });
+    const entries=Object.entries(centreMap).filter(([,v])=>v.tonnes>0||v.payout>0);
+    if(!entries.length){ canvas.closest('.chart-wrap').innerHTML='<div class="rpt-empty">No data for this period</div>'; return; }
+    new Chart(canvas,{type:'bar',
+      data:{
+        labels:entries.map(([k])=>k.replace(' Collection Centre','')),
+        datasets:[
+          {label:'Tonnage (MT)',data:entries.map(([,v])=>+v.tonnes.toFixed(3)),backgroundColor:GREEN,yAxisID:'y'},
+          {label:'Payout (RM)',data:entries.map(([,v])=>+v.payout.toFixed(2)),backgroundColor:AMBER,yAxisID:'y1'}
+        ]
+      },
+      options:dualOpts
+    });
+
+  } else {
+    const canvas=document.getElementById('tripChart'); if(!canvas) return;
+    const rY=state.rptTripYear!=null?+state.rptTripYear:now.getFullYear();
+    const rM=state.rptTripMonth!=null?+state.rptTripMonth:now.getMonth()+1;
+    const list=scopedTxns().filter(t=>{
+      if(!t.dateTime) return false;
+      const d=new Date(t.dateTime);
+      return d.getFullYear()===rY && d.getMonth()+1===rM;
+    });
+    const supMap={};
+    list.forEach(t=>{
+      const k=(t.supplier||'').trim()||'(Unknown)';
+      if(!supMap[k]) supMap[k]={tonnes:0,payout:0};
+      supMap[k].tonnes+=(+t.nettWeight||0)/1000;
+      supMap[k].payout+=(+t.payout||0);
+    });
+    const entries=Object.entries(supMap).sort((a,b)=>b[1].tonnes-a[1].tonnes).slice(0,20);
+    if(!entries.length){ canvas.closest('.chart-wrap').innerHTML='<div class="rpt-empty">No data for this period</div>'; return; }
+    new Chart(canvas,{type:'bar',
+      data:{
+        labels:entries.map(([k])=>k),
+        datasets:[
+          {label:'Tonnage (MT)',data:entries.map(([,v])=>+v.tonnes.toFixed(3)),backgroundColor:GREEN,yAxisID:'y'},
+          {label:'Payout (RM)',data:entries.map(([,v])=>+v.payout.toFixed(2)),backgroundColor:AMBER,yAxisID:'y1'}
+        ]
+      },
+      options:dualOpts
+    });
+  }
 }
 
 /* ---------- USERS ---------- */
